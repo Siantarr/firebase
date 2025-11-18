@@ -1,5 +1,6 @@
 package com.example.fireeeee
 
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.widget.ArrayAdapter
@@ -9,12 +10,17 @@ import android.widget.ImageView
 import android.widget.ListView
 import android.widget.SimpleAdapter
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.cloudinary.android.MediaManager
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.firestore
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
     var dataProvinsi = ArrayList<daftarProvinsi>()
@@ -26,6 +32,16 @@ class MainActivity : AppCompatActivity() {
     lateinit var _etIbuKota : EditText
     lateinit var _btnSimpan : Button
     lateinit var _lvData : ListView
+    lateinit var _ivUpload : ImageView
+
+    private val CLOUDINARY_CLOUD_NAME = "dd4jhfpnf"
+    private val UNSIGNED_UPLOAD_PRESET = "preset1"
+
+    private var selectedImageUri: Uri? = null
+    private var cameraImageUri: Uri? = null
+
+
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,6 +53,9 @@ class MainActivity : AppCompatActivity() {
         _etIbuKota=findViewById(R.id.etIbuKota)
         _btnSimpan=findViewById(R.id.btnSimpan)
         _lvData=findViewById(R.id.lvData)
+        _ivUpload = findViewById(R.id.ivUpload)
+
+
 
 //        lvAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_2, dataProvinsi)
         lvAdapter = SimpleAdapter(
@@ -89,11 +108,62 @@ class MainActivity : AppCompatActivity() {
 
         ReadData(db)
 
+        val config = mapOf("cloud_name" to CLOUDINARY_CLOUD_NAME, "upload_preset" to UNSIGNED_UPLOAD_PRESET)
+        MediaManager.init(this, config)
+
+        _ivUpload.setOnClickListener {
+            showImagePickDialog()
+        }
+
+
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
+    }
+
+    private val pickImageFromGallery =
+        registerForActivityResult(ActivityResultContracts.GetContent()) {uri: Uri? ->
+            uri?.let {
+                selectedImageUri = it
+                _ivUpload.setImageURI(it)
+            }
+        }
+
+    private val takePicture = registerForActivityResult(ActivityResultContracts.TakePicture()){
+        if(it){
+            selectedImageUri = cameraImageUri
+            _ivUpload.setImageURI(cameraImageUri)
+        }
+    }
+    private fun createImageUri() : Uri?{
+        val imageFile = File(
+            cacheDir,
+            "temp_image_${System.currentTimeMillis()}.jpg"
+        )
+        return FileProvider.getUriForFile(
+            this,
+            "$packageName.fileprovider",
+            imageFile
+        )
+    }
+
+    private fun showImagePickDialog(){
+        val options = arrayOf("Pilih dari Gallery", "Ambil Foto")
+        AlertDialog.Builder(this)
+            .setTitle("Pilih Gambar")
+            .setItems(options) { dialog, which ->
+                when (which) {
+                    0 -> pickImageFromGallery.launch("image/*")
+                    1 -> {
+                        createImageUri()?.let { uri ->
+                            cameraImageUri = uri
+                            takePicture.launch(uri)
+                        }
+                    }
+                }
+            }.show()
     }
 
     fun TambahData(db: FirebaseFirestore, provinsi : String, ibuKota : String){
